@@ -6,8 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
 from BaseModel import BaseModel
-from torch_geometric.utils import scatter_
-
+from torch_geometric.utils import scatter
 
 class GCN(torch.nn.Module):
     def __init__(self, edge_index, batch_size, num_user, num_item, dim_feat, dim_id, aggr_mode, concate, num_layer, has_id, dim_latent=None):
@@ -106,7 +105,7 @@ class MMGCN(torch.nn.Module):
     def forward(self, user_nodes, pos_item_nodes, neg_item_nodes):
         v_rep = self.v_gcn(self.v_feat, self.id_embedding)
         a_rep = self.a_gcn(self.a_feat, self.id_embedding)
-        self.t_feat = torch.tensor(scatter_('mean', self.word_embedding(self.words_tensor[1]), self.words_tensor[0])).cuda()
+        self.t_feat = torch.tensor(scatter('mean', self.word_embedding(self.words_tensor[1]), self.words_tensor[0])).cuda()
         t_rep = self.t_gcn(self.t_feat, self.id_embedding)
         
         # pre_interaction_score
