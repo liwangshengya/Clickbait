@@ -1,93 +1,39 @@
-# Clicks can be Cheating: Counterfactual Recommendation for Mitigating Clickbait Issue
+主要修改了loss,按照T_CE的方法加入了BPR_loss的截断
+##### 修改地方
+1. 在args参数中加入了loss_type来选择loss的类型，将其传入到loss函数中
+2. loss中加入了两个新参数,interation,loss_type,interation是仿照T_CE中的interation来加的，主要记录了总的batch轮数,具体统计方法就是在epoch和dataloader的两重循环中自增
+3. BPR_T_CE还是仿照T_CE来写的，这里代码书写的合理性和截断的取值都有待商榷，这里还是按照T_CE来舍弃drop_rate数量的loss，重新计算剩余的loss，但个人感觉直接拿来用有点生硬
+4. 这里的作者写的CE_loss和交叉熵公式有点不太一样，原始二元交叉熵loss是真实值和标签值之间的运算，这里成了副样本和正样本之间的
+5. 由于这里的CE的运算还没搞懂，所以是按照那种方式来实现T_CE还要进一步研究讨论，这里暂时还没有实现
+  $$Out = -Labels * \log(\sigma(Logit)) - (1 - Labels) * \log(1 - \sigma(Logit))
+$$
+ ```python
+  def loss(self, data,interation,loss_type=1):
+        user, pos_items, neg_items = data
+        pos_scores, neg_scores, pre_pos_scores, pre_neg_scores = self.forward(user.to(device), pos_items.to(device), neg_items.to(device))
+        if loss_type == 0:
+            # BPR loss
+            loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
+            loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores)))
+            return loss_value + self.alpha * loss_value_pre
 
-This is the pytorch implementation of our paper at SIGIR 2021:
+        if loss_type == 1:
+            #BPR_T_CE loss
+            loss_value=-torch.log2(torch.sigmoid(pos_scores - neg_scores))
+            loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores))
+            loss=loss_value+self.alpha*loss_value_pre
 
-> [Clicks can be Cheating: Counterfactual Recommendation for Mitigating Clickbait Issue](https://arxiv.org/abs/2009.09945)
->
-> Wenjie Wang, Fuli Feng, Xiangnan He, Hanwang  Zhang, Tat-Seng Chua.
+            drop_rate=drop_rate_schedule(interation)
 
-## Environment
+            # #去除小于dorp_rate的loss
+            # loss=loss[loss>drop_rate]
 
-- Anaconda 3
-- python 3.7.3
-- pytorch 1.4.0
-- numpy 1.16.4 
 
-## Usage
-
-#### Parameters
-
-- model_name: MMGCN.
-- l_r: learning rate. Default: 1e-3.
-- weight_decay: the hyper-parameter for weight decay. Default: 1e-3.
-- gpu_id: the gpu used for training. 
-
-Other parameter settings can be found in train.py. We keep the default setings as MMGCN.
-
-### Training
-
-```
-python train.py --model_name=$1 --l_r=$2 --weight_decay=$3
-```
-
-or use run.sh
-
-```
-sh run.sh gpu_id model_name l_r weight_decay
-```
-
-The log file will be in the ./log/ folder.
-
-### Inference
-
-1. Download the checkpoints released by us from [Google drive](https://drive.google.com/drive/folders/1LJNpDtj8kinqb89Dimx0OpRylwQmIZje?usp=sharing).
-2. Put the '.pth' file into the model_1 folder.
-3. Run inference.py or run_inference.sh:
-
-```
-python inference.py --model_name=$2 --l_r=$3 --weight_decay=$4 --log_name="$2_tiktok_$3lr_$4wd_$5"
-```
-
-```
-sh run_inference.sh gpu_id model_name l_r weight_decay log_name
-```
-
-### Examples
-
-1. Train MMGCN on Tiktok:
-
-```
-cd ./code/tiktok
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name=MMGCN --l_r=1e-3 --weight_decay=1e-3
-```
-
-2. Inference MMGCN on Adressa
-
-```
-cd ./code/adressa
-sh run_inference.sh 0 MMGCN 1e-3 1e-3 TIE
-```
-
-## Citation  
-
-If you use our code, please kindly cite:
-
-```
-@inproceedings{wang2021Clicks,
-  title={Clicks can be Cheating: Counterfactual Recommendationfor Mitigating Clickbait Issue},
-  author={Wenjie Wang, Fuli Feng, Xiangnan He, Hanwang Zhang, and Tat-Seng Chua},
-  booktitle={SIGIR},
-  year={2021},
-  publisher={ACM}
-}
-```
-
-## Acknowledgment
-
-Thanks to the MMGCN implementation:
-
-- [MMGCN](https://github.com/weiyinwei/MMGCN) from Yinwei Wei. 
-
-## License
-
-NUS © [NExT++](https://www.nextcenter.org/)
+            rememer_rate=1-drop_rate
+            idx_loss=np.argsort(loss.cpu().detach().numpy())
+            idx_loss=idx_loss[:int(len(idx_loss)*rememer_rate)]
+            #取出留下的样本
+            loss=loss[idx_loss]
+            print('loss',loss.sum())
+            return loss.sum()
+ ```
