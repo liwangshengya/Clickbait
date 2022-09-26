@@ -14,14 +14,22 @@ from Model import MMGCN
 
 torch.set_num_threads(2)
 
+#选择设备
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 seed = 2020
 torch.manual_seed(seed) # cpu
-torch.cuda.manual_seed(seed) #gpu
+#torch.cuda.manual_seed(seed) #gpu
 np.random.seed(seed) #numpy
 random.seed(seed) #random and transforms
-torch.backends.cudnn.enabled = False
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic=True # cudnn
+# torch.backends.cudnn.enabled = False
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic=True # cudnn
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed) #gpu
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic=True # cudnn
 def worker_init_fn(worker_id):
     np.random.seed(seed + worker_id)
 
@@ -66,7 +74,7 @@ class Net:
 #################################################################################################################################
 
         if self.model_name == 'MMGCN':
-            self.model = MMGCN(self.v_feat_tensor, self.a_feat_tensor, self.t_feat_tensor, self.edge_index, self.batch_size, self.num_user, self.num_item, self.aggr_mode, self.concat, self.num_layer, self.has_id, self.user_item_dict, self.dim_latent, self.alpha).cuda()
+            self.model = MMGCN(self.v_feat_tensor, self.a_feat_tensor, self.t_feat_tensor, self.edge_index, self.batch_size, self.num_user, self.num_item, self.aggr_mode, self.concat, self.num_layer, self.has_id, self.user_item_dict, self.dim_latent, self.alpha).to(device)
         
 #         elif self.model_name == 'VBPR':
 #             self.model = VBPR_model(self.v_feat_tensor, self.a_feat_tensor, self.t_feat_tensor, self.num_user, self.num_item, self.user_item_dict, self.dim_latent).cuda()
@@ -91,6 +99,7 @@ class Net:
         max_ndcg = [0]*4
         num_des = 0
 
+        count=0
         for epoch in range(self.num_epoch):
             self.model.train()
             print('Now, training start ...')
@@ -98,11 +107,13 @@ class Net:
             sum_loss = 0.0
             for data in self.train_dataloader:
                 self.optimizer.zero_grad()
-                self.loss = self.model.loss(data)
+                self.loss = self.model.loss(data,count,args.loss_type)
                 self.loss.backward()
                 self.optimizer.step()
                 pbar.update(self.batch_size)
                 sum_loss += self.loss
+                #记录以交互次数
+                count += 1
             print(sum_loss/self.batch_size)
             pbar.close()
 
@@ -162,7 +173,10 @@ if __name__ == '__main__':
     parser.add_argument('--num_layer', type=int, default=2, help='Layer number.')
     parser.add_argument('--has_id', type=bool, default=True, help='Has id_embedding')
     parser.add_argument('--concat', type=bool, default=False, help='Concatenation')
+    parser.add_argument('--loss_type', type=int, default=1,help='loss_type:0:BPR,1:BPR+T_CE,2:CE,3:T_CE')
+
     args = parser.parse_args()
+
     print("arguments: %s " %(args))
     egcn = Net(args)
     test_precision, test_recall, test_ndcg_score = egcn.run()
