@@ -13,7 +13,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # define drop rate schedule
-def drop_rate_schedule(iteration, drop_rate=0.1,exponent=1,num_gradual=30000 ):
+def drop_rate_schedule(iteration, drop_rate=0.06,exponent=1,num_gradual=75000):
     # addr 0.05 1   30000
     #amazon 0.1 1   30000
     #yelp  0.1 1 30000
@@ -98,17 +98,17 @@ class GCN(torch.nn.Module):
 class MMGCN(torch.nn.Module):
     def __init__(self, v_feat, a_feat, words_tensor, edge_index, batch_size, num_user, num_item, aggr_mode, concate, num_layer, has_id, user_item_dict, dim_x, alpha):
         super(MMGCN, self).__init__()
-        self.batch_size = batch_size
-        self.num_user = num_user
-        self.num_item = num_item
-        self.aggr_mode = aggr_mode
+        self.batch_size = batch_size  # batch size
+        self.num_user = num_user    # number of users
+        self.num_item = num_item    # number of items
+        self.aggr_mode = aggr_mode  
         self.concate = concate
-        self.words_tensor = torch.tensor(words_tensor, dtype=torch.long).to(device)
-        self.v_feat = torch.tensor(v_feat, dtype=torch.float).to(device)
-        self.a_feat = torch.tensor(a_feat, dtype=torch.float).to(device)
-        self.edge_index = torch.tensor(edge_index).t().contiguous().to(device)
+        self.words_tensor = torch.tensor(words_tensor, dtype=torch.long).to(device)  #内容特征
+        self.v_feat = torch.tensor(v_feat, dtype=torch.float).to(device)       #视频特征
+        self.a_feat = torch.tensor(a_feat, dtype=torch.float).to(device)     #曝光特征
+        self.edge_index = torch.tensor(edge_index).t().contiguous().to(device)  
         self.edge_index = torch.cat((self.edge_index, self.edge_index[[1,0]]), dim=1)
-        self.user_item_dict = user_item_dict
+        self.user_item_dict = user_item_dict   #用户-视频字典
         self.alpha = alpha
         
         self.word_embedding = nn.Embedding(torch.max(self.words_tensor[1])+1, 128)
@@ -128,7 +128,8 @@ class MMGCN(torch.nn.Module):
         self.t_feat = torch.tensor(scatter_('mean', self.word_embedding(self.words_tensor[1]), self.words_tensor[0])).to(device)
         t_rep = self.t_gcn(self.t_feat, self.id_embedding)
         
-        # pre_interaction_score
+        #pre仅含有曝光特在，post是三个特征的均值
+        # pre_interaction_score  #y^u_e 
         pre_representation = t_rep
         self.pre_embedding = pre_representation
         pre_user_tensor = pre_representation[user_nodes]
@@ -137,7 +138,7 @@ class MMGCN(torch.nn.Module):
         pre_pos_scores = torch.sum(pre_user_tensor*pre_pos_item_tensor, dim=1)
         pre_neg_scores = torch.sum(pre_user_tensor*pre_neg_item_tensor, dim=1)
 
-        # post_interaction_score
+        # post_interaction_score        #y^u_i
         post_representation = (v_rep+a_rep+t_rep)/3
         self.post_embedding = post_representation
         post_user_tensor = post_representation[user_nodes]
@@ -148,7 +149,7 @@ class MMGCN(torch.nn.Module):
 
         # fusion of pre_ and post_ interaction scores
         # # post*sigmoid(pre)
-        pos_scores = post_pos_scores*torch.sigmoid(pre_pos_scores)
+        pos_scores = post_pos_scores*torch.sigmoid(pre_pos_scores)   
         neg_scores = post_neg_scores*torch.sigmoid(pre_neg_scores)
 
         return pos_scores, neg_scores, pre_pos_scores, pre_neg_scores
@@ -160,11 +161,12 @@ class MMGCN(torch.nn.Module):
             # BPR loss
             loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
             loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores)))
-            print("BPR loss: ", loss_value+self.alpha*loss_value_pre)
+           # print("BPR loss: ", loss_value+self.alpha*loss_value_pre)
             return loss_value + self.alpha * loss_value_pre
 
         if loss_type == 1:
             #BPR_T_CE loss
+            #计算BPRLoss
             loss_value=-torch.log2(torch.sigmoid(pos_scores - neg_scores))
             loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores))
             loss=loss_value+self.alpha*loss_value_pre
@@ -174,14 +176,17 @@ class MMGCN(torch.nn.Module):
             # #去除小于dorp_rate的loss
             # loss=loss[loss>drop_rate]
 
-
+            #计算要保留的loss的个数
             rememer_rate=1-drop_rate
-            idx_loss=np.argsort(loss.cpu().detach().numpy())
-            idx_loss=idx_loss[:int(len(idx_loss)*rememer_rate)]
+            ind_loss=torch.argsort(loss)
+            ind_loss=ind_loss[:int(len(loss)*rememer_rate)]
+            # idx_loss=np.argsort(loss.cpu().detach().numpy())
+            # idx_loss=idx_loss[:int(len(idx_loss)*rememer_rate)]
             #取出留下的样本
-            loss=loss[idx_loss]
-            print('loss',loss.sum())
-            return loss.sum()
+            loss=loss[ind_loss]
+            loss=torch.sum(loss)
+           # print('loss',loss.sum())
+            return loss
 
         if loss_type == 2: 
             # CE loss
@@ -216,6 +221,7 @@ class MMGCN(torch.nn.Module):
             pre_score_matrix = torch.matmul(temp_pre_user_tensor, pre_item_tensor.t())
             post_score_matrix = torch.matmul(temp_post_user_tensor, post_item_tensor.t())
             
+            #Y_CR推理
             score_matrix = (post_score_matrix - torch.mean(post_score_matrix, 1, True))*torch.sigmoid(pre_score_matrix)
 
             for row, col in self.user_item_dict.items():

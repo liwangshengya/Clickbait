@@ -13,12 +13,16 @@ torch.set_num_threads(2)
 
 seed = 2020
 torch.manual_seed(seed) # cpu
-torch.cuda.manual_seed(seed) #gpu
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed) #gpu
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic=True # cudnn
 np.random.seed(seed) #numpy
 random.seed(seed) #random and transforms
-torch.backends.cudnn.enabled = False
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic=True # cudnn
+# torch.backends.cudnn.enabled = False
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic=True # cudnn
 def worker_init_fn(worker_id):
     np.random.seed(seed + worker_id)
 

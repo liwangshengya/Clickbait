@@ -35,8 +35,8 @@ def worker_init_fn(worker_id):
 
 class Net:
     def __init__(self, args):
-        self.model_name = args.model_name
-        self.data_path = args.data_path
+        self.model_name = args.model_name   #模型名称
+        self.data_path = args.data_path    
         self.save_path = args.save_path
         self.log_name = args.log_name
         self.learning_rate = args.l_r
@@ -46,8 +46,8 @@ class Net:
         self.num_workers = args.num_workers
         self.num_epoch = args.num_epoch
         self.early_stop = args.early_stop
-        self.num_user = args.num_user
-        self.num_item = args.num_item
+        self.num_user = args.num_user     #用户数
+        self.num_item = args.num_item    #物品数
         self.dim_latent = args.dim_latent
         self.aggr_mode = args.aggr_mode
         self.num_layer = args.num_layer
@@ -62,13 +62,13 @@ class Net:
         self.train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True, worker_init_fn=worker_init_fn)
         self.edge_index = np.load(self.data_path+'train.npy')
         self.user_item_dict = np.load(self.data_path+'user_item_dict.npy', allow_pickle=True).item()
-        self.val_dataset = np.load(self.data_path+'val_full.npy', allow_pickle=True)
-        self.test_dataset = np.load(self.data_path+'test_full.npy', allow_pickle=True)
-        self.v_feat_tensor = torch.load(self.data_path+'feat_v.pt')
-        print("v_feat_tensor", self.v_feat_tensor.size())
-        self.a_feat_tensor = torch.load(self.data_path+'feat_a.pt')
+        self.val_dataset = np.load(self.data_path+'val_full.npy', allow_pickle=True)   #验证集
+        self.test_dataset = np.load(self.data_path+'test_full.npy', allow_pickle=True)  #测试集
+        self.v_feat_tensor = torch.load(self.data_path+'feat_v.pt')   #视频特征
+        print("v_feat_tensor", self.v_feat_tensor.size())     
+        self.a_feat_tensor = torch.load(self.data_path+'feat_a.pt')   #曝光特在
         print("a_feat_tensor", self.a_feat_tensor.size())
-        self.t_feat_tensor = torch.load(self.data_path+'feat_t.pt')
+        self.t_feat_tensor = torch.load(self.data_path+'feat_t.pt')   #文本特征
         print("t_feat_tensor", self.t_feat_tensor.size())
         print('Data has been loaded.')
 #################################################################################################################################
@@ -114,7 +114,9 @@ class Net:
                 sum_loss += self.loss
                 #记录以交互次数
                 count += 1
+            print("count", count)
             print(sum_loss/self.batch_size)
+
             pbar.close()
 
             print('Validation start...')

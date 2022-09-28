@@ -6,8 +6,8 @@ from torch.utils.data import Dataset, DataLoader
 class MyDataset(Dataset):
 	def __init__(self, path, num_user, num_item):
 		super(MyDataset, self).__init__()
-		self.data = np.load(path+'train.npy')
-		self.adj_lists = np.load(path+'adj.npy',allow_pickle=True).item()
+		self.data = np.load(path+'train.npy')   #训练集
+		self.adj_lists = np.load(path+'adj.npy',allow_pickle=True).item()  #
 		self.all_set = set(range(num_user, num_user+num_item))
 
 	def __getitem__(self, index):
