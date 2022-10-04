@@ -1,3 +1,4 @@
+from itertools import count
 import os
 import argparse
 import time
@@ -13,15 +14,18 @@ from DataLoad import MyDataset
 from Model import MMGCN
 
 torch.set_num_threads(2)
-
+#选择设备
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 seed = 2020
 torch.manual_seed(seed) # cpu
-torch.cuda.manual_seed(seed) #gpu
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed) #gpu
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic=True # cudnn
 np.random.seed(seed) #numpy
 random.seed(seed) #random and transforms
-torch.backends.cudnn.enabled = False
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic=True # cudnn
+
 def worker_init_fn(worker_id):
     np.random.seed(seed + worker_id)
 
@@ -66,7 +70,7 @@ class Net:
 #################################################################################################################################
 
         if self.model_name == 'MMGCN':
-            self.model = MMGCN(self.d_feat_tensor, self.b_feat_tensor, self.t_feat_tensor, self.edge_index, self.batch_size, self.num_user, self.num_item, self.aggr_mode, self.concat, self.num_layer, self.has_id, self.user_item_dict, self.dim_latent, self.alpha).cuda()
+            self.model = MMGCN(self.d_feat_tensor, self.b_feat_tensor, self.t_feat_tensor, self.edge_index, self.batch_size, self.num_user, self.num_item, self.aggr_mode, self.concat, self.num_layer, self.has_id, self.user_item_dict, self.dim_latent, self.alpha).to(device)
         
 #         elif self.model_name == 'VBPR':
 #             self.model = VBPR_model(self.d_feat_tensor, self.b_feat_tensor, self.t_feat_tensor, self.num_user, self.num_item, self.user_item_dict, self.dim_latent).cuda()
@@ -91,6 +95,7 @@ class Net:
         max_ndcg = [0]*4
         num_des = 0
 
+        count = 0
         for epoch in range(self.num_epoch):
             self.model.train()
             print('Now, training start ...')
@@ -98,11 +103,12 @@ class Net:
             sum_loss = 0.0
             for data in self.train_dataloader:
                 self.optimizer.zero_grad()
-                self.loss = self.model.loss(data)
+                self.loss = self.model.loss(data,count,args.loss_type)
                 self.loss.backward()
                 self.optimizer.step()
                 pbar.update(self.batch_size)
                 sum_loss += self.loss
+            count += 1
             print(sum_loss/self.batch_size)
             pbar.close()
 
@@ -121,7 +127,7 @@ class Net:
                 print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_precision[0], test_precision[1], test_precision[2], test_precision[3]))
                 print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_recall[0], test_recall[1], test_recall[2], test_recall[3]))
                 print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_ndcg_score[0], test_ndcg_score[1], test_ndcg_score[2], test_ndcg_score[3]))
-
+            torch.save(self.model, '{}{}_{}_{}.pth'.format(self.save_path, self.model_name, self.log_name, epoch))
             if recall[0] > max_recall[0]:
                 max_recall = copy.deepcopy(recall)
                 max_rec = copy.deepcopy(test_recall)
@@ -162,6 +168,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_layer', type=int, default=2, help='Layer number.')
     parser.add_argument('--has_id', type=bool, default=True, help='Has id_embedding')
     parser.add_argument('--concat', type=bool, default=False, help='Concatenation')
+    parser.add_argument('--loss_type', type=float, default=3, help='loss_type:0:BPR,1:BPR+T_CE,2:CE,3:T_CE')
     args = parser.parse_args()
     print("arguments: %s " %(args))
     egcn = Net(args)

@@ -9,6 +9,20 @@ from BaseModel import BaseModel
 from torch_geometric.utils import scatter_
 
 
+#选择GPU或者CPU
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# define drop rate schedule
+def drop_rate_schedule(iteration, drop_rate=0.035,exponent=1,num_gradual=60000):
+    # addr 0.05 1   30000
+    #amazon 0.1 1   30000
+    #yelp  0.1 1 30000
+	drop_rate = np.linspace(0, drop_rate**exponent, num_gradual)
+	if iteration < num_gradual:
+		return drop_rate[iteration]
+	else:
+		return drop_rate
+
 class GCN(torch.nn.Module):
     def __init__(self, edge_index, batch_size, num_user, num_item, dim_feat, dim_id, aggr_mode, concate, num_layer, has_id, dim_latent=None):
         super(GCN, self).__init__()
@@ -25,7 +39,7 @@ class GCN(torch.nn.Module):
         self.has_id = has_id
 
         if self.dim_latent:
-            self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_latent), requires_grad=True)).cuda()
+            self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_latent), requires_grad=True)).to(device)
             self.MLP = nn.Linear(self.dim_feat, self.dim_latent)
             self.conv_embed_1 = BaseModel(self.dim_latent, self.dim_latent, aggr=self.aggr_mode)
             nn.init.xavier_normal_(self.conv_embed_1.weight)
@@ -35,7 +49,7 @@ class GCN(torch.nn.Module):
             nn.init.xavier_normal_(self.g_layer1.weight) 
 
         else:
-            self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_feat), requires_grad=True)).cuda()
+            self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_feat), requires_grad=True)).to(device)
             self.conv_embed_1 = BaseModel(self.dim_feat, self.dim_feat, aggr=self.aggr_mode)
             nn.init.xavier_normal_(self.conv_embed_1.weight)
             self.linear_layer1 = nn.Linear(self.dim_feat, self.dim_id)
@@ -59,7 +73,7 @@ class GCN(torch.nn.Module):
         temp_features = self.MLP(features) if self.dim_latent else features
 
         x = torch.cat((self.preference, temp_features),dim=0)
-        x = F.normalize(x).cuda()
+        x = F.normalize(x).to(device)
 
         h = F.leaky_relu(self.conv_embed_1(x, self.edge_index))#equation 1
         x_hat = F.leaky_relu(self.linear_layer1(x)) + id_embedding if self.has_id else F.leaky_relu(self.linear_layer1(x))#equation 5 
@@ -84,18 +98,18 @@ class MMGCN(torch.nn.Module):
         self.num_item = num_item
         self.aggr_mode = aggr_mode
         self.concate = concate
-        self.d_feat = torch.tensor(d_feat, dtype=torch.float).cuda()
-        self.b_feat = torch.tensor(b_feat, dtype=torch.float).cuda()
-        self.t_feat = torch.tensor(t_feat, dtype=torch.float).cuda()
-        self.edge_index = torch.tensor(edge_index).t().contiguous().cuda()
+        self.d_feat = torch.tensor(d_feat, dtype=torch.float).to(device)
+        self.b_feat = torch.tensor(b_feat, dtype=torch.float).to(device)
+        self.t_feat = torch.tensor(t_feat, dtype=torch.float).to(device)
+        self.edge_index = torch.tensor(edge_index).t().contiguous().to(device)
         self.edge_index = torch.cat((self.edge_index, self.edge_index[[1,0]]), dim=1)
         self.user_item_dict = user_item_dict
         self.alpha = alpha
         
-        self.id_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x), requires_grad=True)).cuda()
-        # self.result_embed = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).cuda()
-        self.pre_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).cuda()
-        self.post_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).cuda()
+        self.id_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x), requires_grad=True)).to(device)
+        # self.result_embed = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).to(device)
+        self.pre_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).to(device)
+        self.post_embedding = nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_x))).to(device)
 
         self.d_gcn = GCN(self.edge_index, batch_size, num_user, num_item, self.d_feat.size(1), dim_x, self.aggr_mode, self.concate, num_layer=num_layer, has_id=has_id, dim_latent=128)#256)
         self.b_gcn = GCN(self.edge_index, batch_size, num_user, num_item, self.b_feat.size(1), dim_x, self.aggr_mode, self.concate, num_layer=num_layer, has_id=has_id, dim_latent=128)#256)
@@ -130,18 +144,46 @@ class MMGCN(torch.nn.Module):
 
         return pos_scores, neg_scores, pre_pos_scores, pre_neg_scores
 
-    def loss(self, data):
+    def loss(self, data,count,loss_type=3):
         user, pos_items, neg_items = data
-        pos_scores, neg_scores, pre_pos_scores, pre_neg_scores = self.forward(user.cuda(), pos_items.cuda(), neg_items.cuda()) 
+        pos_scores, neg_scores, pre_pos_scores, pre_neg_scores = self.forward(user.to(device), pos_items.to(device), neg_items.to(device))
         # BPR loss
-        loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
-        loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores)))
+        if loss_type == 0:
+            loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores - neg_scores)))
+            loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores - pre_neg_scores)))
+            #loss_value = loss_value + self.alpha*loss_value_pre
+            return loss_value + self.alpha * loss_value_pre
 
+        if loss_type==1:
+            loss_value=-torch.log2(torch.sigmoid(pos_scores-neg_scores))
+            loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores-pre_neg_scores))
+            loss=loss_value+self.alpha*loss_value_pre
+            
+            drop_rate=drop_rate_schedule(count)
+            remember_rate=1-drop_rate
+            
+            ind_loss=torch.argsort(loss)
+            ind_loss=ind_loss[:int(remember_rate*len(loss))]
+            loss=loss[ind_loss]
+            loss=torch.sum(loss)
+            return loss
+        if loss_type==2:
         # # CE loss
-        # loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores))) - torch.sum(torch.log2(torch.sigmoid(1-neg_scores)))
-        # loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores))) - torch.sum(torch.log2(torch.sigmoid(1-pre_neg_scores)))
+            loss_value = -torch.sum(torch.log2(torch.sigmoid(pos_scores))) - torch.sum(torch.log2(torch.sigmoid(1-neg_scores)))
+            loss_value_pre = -torch.sum(torch.log2(torch.sigmoid(pre_pos_scores))) - torch.sum(torch.log2(torch.sigmoid(1-pre_neg_scores)))
+            return loss_value + self.alpha * loss_value_pre
         
-        return loss_value + self.alpha * loss_value_pre
+        if loss_type==3:
+            loss_value=-torch.log2(torch.sigmoid(pos_scores-neg_scores))
+            loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores-pre_neg_scores))
+            
+            beta=0.2
+            weight=torch.pow(torch.sigmoid(pos_scores-neg_scores),beta)
+            weight_pre=torch.pow(torch.sigmoid(pre_pos_scores-pre_neg_scores),beta)
+            loss=loss_value*weight+self.alpha*loss_value_pre*weight_pre
+            loss=torch.sum(loss)
+            return loss
+
 
     def full_ranking(self, val_data, topk=[10, 20, 50, 100]):
         pre_user_tensor = self.pre_embedding[:self.num_user]
