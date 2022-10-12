@@ -13,7 +13,7 @@ from torch_geometric.utils import scatter_
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # define drop rate schedule
-def drop_rate_schedule(iteration, drop_rate=0.035,exponent=1,num_gradual=60000):
+def drop_rate_schedule(iteration, drop_rate=0.3,exponent=1,num_gradual=30000):
     # addr 0.05 1   30000
     #amazon 0.1 1   30000
     #yelp  0.1 1 30000
@@ -158,8 +158,8 @@ class MMGCN(torch.nn.Module):
             loss_value=-torch.log2(torch.sigmoid(pos_scores-neg_scores))
             loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores-pre_neg_scores))
             loss=loss_value+self.alpha*loss_value_pre
-            
-            drop_rate=drop_rate_schedule(count)
+            drop_rate=0.08
+            #drop_rate=drop_rate_schedule(count)
             remember_rate=1-drop_rate
             
             ind_loss=torch.argsort(loss)

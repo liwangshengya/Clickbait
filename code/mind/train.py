@@ -159,7 +159,7 @@ if __name__ == '__main__':
     parser.add_argument('--l_r', type=float, default=1e-3, help='Learning rate.')
     parser.add_argument('--weight_decay', type=float, default=1e-3, help='Weight decay.')
     parser.add_argument('--alpha', type=float, default=1, help='alpha.')
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size.')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size.')
     parser.add_argument('--dim_latent', type=int, default=64, help='Latent dimension.')
     parser.add_argument('--num_epoch', type=int, default=200, help='Epoch number.')
     parser.add_argument('--early_stop', type=int, default=10, help='early_stop Epoch number.')
