@@ -4,3 +4,15 @@ code/tiktok/__pycache__/Model.cpython-37.pyc
 code/tiktok/__pycache__/DataLoad.cpython-37.pyc
 code/tiktok/__pycache__/__init__.cpython-37.pyc
 .res.txt.kate-swp
+data/mind2.zip
+data/mind/feat_title_1.12.pt
+data/mind/feat_body (1).npy
+data/mind/feat_body_1.12.pt
+data/mind/feat_dec (1).npy
+data/mind/feat_des_1.12.pt
+data/mind/feat_title (1).npy
+data/mind/news_body_sorted.csv
+data/mind/news_info_sorted.csv
+data/mind/feat_dec_1.12.pt
+*.pyc
+__pycache__/
