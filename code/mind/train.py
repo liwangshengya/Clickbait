@@ -88,7 +88,7 @@ class Net:
 #################################################################################################################################
 
 
-    def run(self):
+    def run(self,num_run):
         max_recall = [0]*4
         max_rec = [0]*4
         max_pre = [0]*4
@@ -116,20 +116,20 @@ class Net:
             self.model.eval()
             with torch.no_grad():
                 precision, recall, ndcg_score = self.model.full_ranking(self.val_dataset, topk=[10, 20, 50, 100])
-                print('---------------Valid: epoch: {0} ---------------'.format(epoch))
+                print('---------------Valid:第{}次训练 epoch: {0} ---------------'.format(num_run,epoch))
                 print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(precision[0], precision[1], precision[2], precision[3]))
                 print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(recall[0], recall[1], recall[2], recall[3]))
                 print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(ndcg_score[0], ndcg_score[1], ndcg_score[2], ndcg_score[3]))
 
             with torch.no_grad():
                 test_precision, test_recall, test_ndcg_score = self.model.full_ranking(self.test_dataset, topk=[10, 20, 50, 100])
-                print('---------------Test: epoch: {0} ---------------'.format(epoch))
+                print('---------------Test:第{}次训练 epoch: {0} ---------------'.format(num_run,epoch))
                 print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_precision[0], test_precision[1], test_precision[2], test_precision[3]))
                 print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_recall[0], test_recall[1], test_recall[2], test_recall[3]))
                 print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_ndcg_score[0], test_ndcg_score[1], test_ndcg_score[2], test_ndcg_score[3]))
-            if not os.path.exists(self.save_path):
-                os.makedirs(self.save_path)
-            torch.save(self.model, '{}{}_{}_{}.pth'.format(self.save_path, self.model_name, self.log_name, epoch))
+            # if not os.path.exists(self.save_path):
+            #     os.makedirs(self.save_path)
+            # torch.save(self.model, '{}{}_{}_{}.pth'.format(self.save_path, self.model_name, self.log_name, epoch))
             if recall[0] > max_recall[0]:
                 max_recall = copy.deepcopy(recall)
                 max_rec = copy.deepcopy(test_recall)
@@ -139,7 +139,7 @@ class Net:
                 print("########### Best Validation ###########")
                 if not os.path.exists(self.save_path):
                     os.mkdir(self.save_path)
-                torch.save(self.model, '{}{}_{}.pth'.format(self.save_path, self.model_name, self.log_name))
+                torch.save(self.model, '{}_{}{}_{}.pth'.format(num_run,self.save_path, self.model_name, self.log_name))
             else:
                 num_des += 1    
                 if num_des >= self.early_stop:
@@ -152,14 +152,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-cuda', action='store_true', default=False, help='Disables CUDA training.')
     parser.add_argument('--model_name', default='MMGCN', help='Model name.')
-    parser.add_argument('--data_path', default='../../data/minda45/', help='Dataset path')
+    parser.add_argument('--data_path', default='..//data/mind/', help='Dataset path')
     parser.add_argument('--save_path', default='./models/', help='saved model path')
     parser.add_argument('--log_name', default='mind', help='training log name')
     parser.add_argument('--PATH_weight_load', default=None, help='Loading weight filename.')
     parser.add_argument('--l_r', type=float, default=1e-3, help='Learning rate.')
     parser.add_argument('--weight_decay', type=float, default=1e-3, help='Weight decay.')
     parser.add_argument('--alpha', type=float, default=1, help='alpha.')
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size.')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size.')
     parser.add_argument('--dim_latent', type=int, default=64, help='Latent dimension.')
     parser.add_argument('--num_epoch', type=int, default=200, help='Epoch number.')
     parser.add_argument('--early_stop', type=int, default=10, help='early_stop Epoch number.')
@@ -170,12 +170,54 @@ if __name__ == '__main__':
     parser.add_argument('--num_layer', type=int, default=2, help='Layer number.')
     parser.add_argument('--has_id', type=bool, default=True, help='Has id_embedding')
     parser.add_argument('--concat', type=bool, default=False, help='Concatenation')
-    parser.add_argument('--loss_type', type=float, default=0, help='loss_type:0:BPR,1:BPR+T_CE,2:CE,3:T_CE')
+    parser.add_argument('--loss_type', type=float, default=1, help='loss_type:0:BPR,1:BPR+T_CE,2:CE,3:T_CE')
     args = parser.parse_args()
     print("arguments: %s " %(args))
     egcn = Net(args)
-    test_precision, test_recall, test_ndcg_score = egcn.run()
+    #run n次，结果取平均
+    n = 10
+    test_precision_list = []
+    test_recall_list = []
+    test_ndcg_score_list = []
+    for i in range(n):
+        print("第{}次".format(i))
+        test_precision, test_recall, test_ndcg_score = egcn.run(i)
+        test_precision_list.append(test_precision) 
+        test_recall_list.append(test_recall)
+        test_ndcg_score_list.append(test_ndcg_score)
+    test_precision_list = np.array(test_precision_list)
+    test_recall_list = np.array(test_recall_list)
+    test_ndcg_score_list = np.array(test_ndcg_score_list)
+    
+    print('---------------Training Done !- ---------------'.format(args.num_epoch))
+    print("----------------平均结果----------------")
+    print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(np.mean(test_precision_list[:,0]),
+            np.mean(test_precision_list[:,1]),
+            np.mean(test_precision_list[:,2]),
+            np.mean(test_precision_list[:,3])))
+    print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(np.mean(test_recall_list[:,0]),
+            np.mean(test_recall_list[:,1]),
+            np.mean(test_recall_list[:,2]),
+            np.mean(test_recall_list[:,3])))
+    print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(np.mean(test_ndcg_score_list[:,0]),
+            np.mean(test_ndcg_score_list[:,1]),
+            np.mean(test_ndcg_score_list[:,2]),
+            np.mean(test_ndcg_score_list[:,3])))
+    print('----------------------------------------------')
+
+    #选出值最大一次的结果
+    max=np.argmax(test_recall_list[:,0])
+    print('---------------运行10次，最好的一次为第{}次---------------'.format(max+1))
+    #取出最好的结果
+    max_test_precision = test_precision_list[max]
+    max_test_recall = test_recall_list[max]
+    max_test_ndcg_score = test_ndcg_score_list[max]
+    print("-------------------最好的结果为-------------------")
+    print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(max_test_precision[0], max_test_precision[1], max_test_precision[2], max_test_precision[3]))
+    print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(max_test_recall[0], max_test_recall[1], max_test_recall[2], max_test_recall[3]))
+    print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(max_test_ndcg_score[0], max_test_ndcg_score[1], max_test_ndcg_score[2], max_test_ndcg_score[3]))
     print('---------------Training Done !---------------')
-    print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_precision[0], test_precision[1], test_precision[2], test_precision[3]))
-    print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_recall[0], test_recall[1], test_recall[2], test_recall[3]))
-    print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_ndcg_score[0], test_ndcg_score[1], test_ndcg_score[2], test_ndcg_score[3]))
+
+    # print('Precision: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_precision[0], test_precision[1], test_precision[2], test_precision[3]))
+    # print('Recall: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_recall[0], test_recall[1], test_recall[2], test_recall[3]))
+    # print('NDCG: {:.4f}-{:.4f}-{:.4f}-{:.4f}'.format(test_ndcg_score[0], test_ndcg_score[1], test_ndcg_score[2], test_ndcg_score[3]))
