@@ -158,7 +158,7 @@ class MMGCN(torch.nn.Module):
             loss_value=-torch.log2(torch.sigmoid(pos_scores-neg_scores))
             loss_value_pre=-torch.log2(torch.sigmoid(pre_pos_scores-pre_neg_scores))
             loss=loss_value+self.alpha*loss_value_pre
-            drop_rate=0.08
+            drop_rate=0.11
             #drop_rate=drop_rate_schedule(count)
             remember_rate=1-drop_rate
             
